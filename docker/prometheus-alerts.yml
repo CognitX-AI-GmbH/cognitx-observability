@@ -1,0 +1,74 @@
+# Prometheus Alert Rules for CognitX
+#
+# These rules fire alerts when services degrade.
+# Connect Alertmanager or Grafana alerting to receive notifications.
+
+groups:
+  - name: service_health
+    rules:
+      # Service is down (no metrics scraped for 2 minutes)
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} is down"
+          description: "{{ $labels.job }} has been unreachable for 2 minutes."
+
+      # High error rate (>5% of requests returning 5xx)
+      - alert: HighErrorRate
+        expr: >
+          sum(rate(cognitx_http_requests_total{http_status_code=~"5.."}[5m])) by (service)
+          /
+          sum(rate(cognitx_http_requests_total[5m])) by (service)
+          > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx rate on {{ $labels.service }}"
+          description: "{{ $labels.service }} has >5% error rate (current: {{ $value | humanizePercentage }})."
+
+      # High latency (p95 > 10s for inference, > 2s for other services)
+      - alert: HighLatencyInference
+        expr: >
+          histogram_quantile(0.95, rate(cognitx_http_request_duration_seconds_bucket{service="cognitx-inference"}[5m]))
+          > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High inference latency"
+          description: "p95 inference latency is {{ $value | humanizeDuration }} (threshold: 10s)."
+
+      - alert: HighLatencyAPI
+        expr: >
+          histogram_quantile(0.95, rate(cognitx_http_request_duration_seconds_bucket{service!="cognitx-inference"}[5m]))
+          > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency on {{ $labels.service }}"
+          description: "p95 latency is {{ $value | humanizeDuration }} (threshold: 2s)."
+
+  - name: infrastructure
+    rules:
+      # Prometheus scrape failures
+      - alert: ScrapeFailure
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cannot scrape {{ $labels.job }}"
+
+      # High memory on Prometheus itself
+      - alert: PrometheusHighMemory
+        expr: process_resident_memory_bytes{job="prometheus"} > 2e9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus using >2GB memory"

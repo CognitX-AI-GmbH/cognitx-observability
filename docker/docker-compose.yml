@@ -1,0 +1,138 @@
+name: cognitx-core-observability
+
+# Observability Stack for CognitX Backend Services
+#
+# Provides:
+#   - Phoenix:     LLM tracing UI (traces from intelligence + inference + gateway)
+#   - Phoenix DB:  PostgreSQL backend for Phoenix
+#   - Prometheus:  Metrics scraping from all services (/metrics)
+#   - Grafana:     Dashboards for Prometheus metrics
+#
+# Usage:
+#   cd docker && docker compose up -d
+#
+# Access:
+#   - Phoenix:     http://localhost:6006
+#   - Prometheus:  http://localhost:9090
+#   - Grafana:     http://localhost:3001
+
+services:
+  # Phoenix - LLM Observability (traces, spans, evaluations)
+  phoenix:
+    image: arizephoenix/phoenix:version-13.11.0
+    container_name: cognitx-core-phoenix
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:${PHOENIX_UI_PORT:-6006}:6006"
+      - "127.0.0.1:${PHOENIX_OTLP_PORT:-4317}:4317"
+    environment:
+      - PHOENIX_SQL_DATABASE_URL=postgresql://${PHOENIX_DB_USER}:${PHOENIX_DB_PASSWORD}@phoenix-db:5432/${PHOENIX_DB_NAME}
+      - PHOENIX_WORKING_DIR=/data
+    volumes:
+      - phoenix-data:/data
+    depends_on:
+      phoenix-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6006/healthz')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - observability
+      - cognitx_core_network
+
+  # Phoenix PostgreSQL - Production trace storage
+  phoenix-db:
+    image: postgres:17-alpine
+    container_name: cognitx-core-phoenix-db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${PHOENIX_DB_USER}
+      - POSTGRES_PASSWORD=${PHOENIX_DB_PASSWORD}
+      - POSTGRES_DB=${PHOENIX_DB_NAME}
+    volumes:
+      - phoenix-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PHOENIX_DB_USER:-phoenix} -d ${PHOENIX_DB_NAME:-phoenix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - observability
+
+  # Prometheus - Metrics scraping & storage
+  prometheus:
+    image: prom/prometheus:v3.10.0
+    container_name: cognitx-core-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus-alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - observability
+      - cognitx_core_network
+
+  # Grafana - Dashboards & visualization
+  grafana:
+    image: grafana/grafana:12.3.5
+    container_name: cognitx-core-grafana
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - observability
+
+volumes:
+  phoenix-data:
+  phoenix-db-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  observability:
+    driver: bridge
+  cognitx_core_network:
+    name: cognitx_core_network
+    external: true

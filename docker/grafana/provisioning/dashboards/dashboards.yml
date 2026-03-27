@@ -1,0 +1,13 @@
+# Auto-provisioned dashboard provider for CognitX Grafana
+apiVersion: 1
+
+providers:
+  - name: CognitX
+    orgId: 1
+    folder: CognitX
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

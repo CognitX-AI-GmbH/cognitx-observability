@@ -1,0 +1,14 @@
+# Auto-provisioned datasources for CognitX Grafana
+apiVersion: 1
+
+datasources:
+  # Prometheus — metrics from all 5 services
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: "15s"      # matches scrape_interval
+      httpMethod: POST
