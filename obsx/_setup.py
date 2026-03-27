@@ -139,7 +139,12 @@ def init_observability(
 
 
 def shutdown() -> None:
-    """Flush pending spans and metrics. Call during service shutdown."""
+    """Flush pending spans and metrics. Call during service shutdown.
+
+    Resets the initialization guard so init_observability() can be called again
+    (useful in tests).
+    """
+    global _initialized
     tracer_provider = trace.get_tracer_provider()
     if hasattr(tracer_provider, "shutdown"):
         try:
@@ -153,6 +158,8 @@ def shutdown() -> None:
             meter_provider.shutdown()  # type: ignore[union-attr]
         except Exception:
             logger.exception("Error shutting down MeterProvider")
+
+    _initialized = False
 
 
 # ── Private helpers ──

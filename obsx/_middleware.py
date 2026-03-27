@@ -6,7 +6,7 @@ OTEL FastAPI instrumentation already records:
   - http.server.duration (histogram)
   - http.server.request.size / response.size
 
-This middleware adds CognitX-specific metrics:
+This middleware adds service-level metrics:
   - http.requests_total (counter with method, endpoint, status labels)
   - http.errors_total (counter for 4xx/5xx)
   - http.request_duration_seconds (histogram)
@@ -48,7 +48,7 @@ class RequestMetricsMiddleware(BaseHTTPMiddleware):
         service_name: Service name for meter scoping.
         known_routes: Optional list of route prefixes for path normalization.
             Prevents Prometheus label cardinality explosion by collapsing
-            paths like "/v1/models/gpt-4o" → "/v1/models".
+            paths like "/v1/models/gpt-4o" to "/v1/models".
             If not provided, raw request paths are used (fine for low-traffic services).
     """
 

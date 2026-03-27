@@ -73,10 +73,14 @@ def create_histogram(meter: Meter, name: str, description: str = "", unit: str =
 def create_histogram_llm(
     meter: Meter, name: str, description: str = "", unit: str = "s"
 ) -> Histogram:
-    """Create a histogram with LLM-tuned buckets (0.1s to 120s).
+    """Create a histogram for LLM latency metrics.
 
-    Use this for inference latency, TTFT, TPOT, and other LLM timing metrics
-    where requests commonly range from 100ms to 2 minutes.
+    The histogram itself uses default OTEL buckets, but when init_observability()
+    registers llm_metric_views(), any histogram matching *ttft*, *tpot*, or
+    *duration*seconds* automatically gets LLM-tuned buckets (0.1s to 120s).
+
+    Name your metric accordingly (e.g. "inference.ttft_seconds") for automatic
+    bucket matching.
     """
     return meter.create_histogram(name, description=description, unit=unit)
 
@@ -86,9 +90,14 @@ def create_histogram_tokens(
     name: str,
     description: str = "",
 ) -> Histogram:
-    """Create a histogram with token-count buckets (1 to 128K).
+    """Create a histogram for token count metrics.
 
-    Use this for tracking input/output token distributions.
+    The histogram itself uses default OTEL buckets, but when init_observability()
+    registers llm_metric_views(), any histogram matching *tokens* automatically
+    gets token-count buckets (1 to 128K).
+
+    Name your metric accordingly (e.g. "inference.output_tokens") for automatic
+    bucket matching.
     """
     return meter.create_histogram(name, description=description, unit="tokens")
 
@@ -105,7 +114,7 @@ def llm_metric_views() -> list[View]:
 
     Register these when creating the MeterProvider to override default histogram buckets:
 
-        from observability._metrics import llm_metric_views
+        from obsx._metrics import llm_metric_views
         MeterProvider(views=llm_metric_views(), ...)
 
     Views match on metric name patterns - any histogram ending in _duration_seconds

@@ -37,6 +37,8 @@ For LLM inference metrics with proper histogram buckets:
     tokens = create_histogram_tokens(meter, "inference.output_tokens", "Output token count")
 """
 
+__version__ = "0.4.0"
+
 # Re-export OTEL trace for convenience
 from opentelemetry import trace
 
@@ -74,4 +76,5 @@ __all__ = [
     "LATENCY_BUCKETS_DEFAULT",
     "LATENCY_BUCKETS_LLM",
     "TOKEN_COUNT_BUCKETS",
+    "__version__",
 ]

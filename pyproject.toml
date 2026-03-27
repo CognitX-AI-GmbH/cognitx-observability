@@ -44,6 +44,7 @@ dependencies = [
     "arize-phoenix-otel>=0.15.0",
 
     # OpenInference LLM instrumentation (semantic spans for OpenAI SDK)
+    # Pinned <0.1.40: newer versions need openinference-semantic-conventions >0.1.28 (unreleased)
     "openinference-instrumentation-openai>=0.1.19,<0.1.40",
 
     # FastAPI (for metrics_router)
