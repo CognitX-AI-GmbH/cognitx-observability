@@ -2,7 +2,7 @@
 
 Plug-and-play observability for Python services. One function call configures OpenTelemetry tracing, Prometheus metrics, and auto-instrumentation for FastAPI, httpx, OpenAI, Redis, and SQLAlchemy.
 
-Built for LLM-powered applications — includes Phoenix OTEL integration, OpenInference semantic spans, and histogram buckets tuned for inference latencies and token counts.
+Built for LLM-powered applications - includes Phoenix OTEL integration, OpenInference semantic spans, and histogram buckets tuned for inference latencies and token counts.
 
 ## Install
 
@@ -68,7 +68,7 @@ init_observability(
     phoenix_enabled=True,              # Use Phoenix for LLM trace visualization
     phoenix_endpoint="http://phoenix:4317",  # Phoenix OTLP gRPC endpoint
     phoenix_project="my-project",      # Phoenix project name (defaults to service_name)
-    # — OR —
+    # or
     otlp_endpoint="http://jaeger:4317",  # Generic OTLP gRPC (Jaeger, Tempo, etc.)
     otlp_insecure=True,                  # False for TLS in production
 
@@ -275,7 +275,7 @@ docker compose up -d
 
 ### Prometheus Configuration
 
-`docker/prometheus.yml` — scrape config for your services:
+`docker/prometheus.yml` - scrape config for your services:
 
 ```yaml
 scrape_configs:
@@ -288,8 +288,8 @@ scrape_configs:
 ### Grafana Dashboards
 
 Pre-built dashboards in `docker/grafana/dashboards/`:
-- **Service Overview** — Request rates, error rates, latency percentiles
-- **Analytics Deep Dive** — LLM-specific metrics, token usage, inference latency
+- **Service Overview** - Request rates, error rates, latency percentiles
+- **Analytics Deep Dive** - LLM-specific metrics, token usage, inference latency
 
 ## Optional Extras
 
@@ -300,7 +300,7 @@ Pre-built dashboards in `docker/grafana/dashboards/`:
 | `logging` | `pip install "obsx[logging]"` | `trace_id` and `span_id` injected into Python log records |
 | `all` | `pip install "obsx[all]"` | Everything above |
 
-All optional instrumentations degrade gracefully — if the package isn't installed, the instrumentation is silently skipped.
+All optional instrumentations degrade gracefully - if the package isn't installed, the instrumentation is silently skipped.
 
 ## API Reference
 

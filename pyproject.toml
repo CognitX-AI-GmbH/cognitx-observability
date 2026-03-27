@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "obsx"
 version = "0.4.0"
-description = "Plug-and-play observability for Python services — Phoenix OTEL tracing + Prometheus metrics + auto-instrumentation"
+description = "Plug-and-play observability for Python services - Phoenix OTEL tracing + Prometheus metrics + auto-instrumentation"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "CognitX AI GmbH", email = "engineering@cognitx.ai" }]

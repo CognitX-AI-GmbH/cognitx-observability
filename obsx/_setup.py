@@ -18,7 +18,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON, TraceIdRatioBased
 
-logger = logging.getLogger("cognitx.observability")
+logger = logging.getLogger("obsx")
 
 _initialized = False
 
@@ -47,7 +47,7 @@ def init_observability(
     Must be called once at service startup, before any meters or tracers are created.
 
     Args:
-        service_name: Service identifier (e.g. "cognitx-intelligence").
+        service_name: Service identifier (e.g. "my-service").
         service_version: SemVer version string.
         environment: Deployment environment (local, staging, production).
         phoenix_enabled: Enable Phoenix OTEL for LLM tracing.
@@ -67,7 +67,7 @@ def init_observability(
     """
     global _initialized
     if _initialized:
-        logger.warning("init_observability() called more than once — skipping")
+        logger.warning("init_observability() called more than once - skipping")
         return
     _initialized = True
 
@@ -121,7 +121,7 @@ def init_observability(
     else:
         tracer_provider = TracerProvider(resource=resource, sampler=sampler)
         trace.set_tracer_provider(tracer_provider)
-        logger.info("TracerProvider configured (no exporter — traces are local only)")
+        logger.info("TracerProvider configured (no exporter - traces are local only)")
 
     # ── Auto-instrumentation ──
     if enable_fastapi:
@@ -176,7 +176,7 @@ def _setup_propagation() -> None:
         )
         logger.info("W3C Trace Context propagation enabled")
     except ImportError:
-        logger.debug("W3C propagation packages not installed — using defaults")
+        logger.debug("W3C propagation packages not installed - using defaults")
 
 
 def _setup_phoenix_tracing(
@@ -203,12 +203,12 @@ def _setup_phoenix_tracing(
         )
     except ImportError:
         logger.warning(
-            "arize-phoenix-otel not installed — falling back to no-op tracer. "
+            "arize-phoenix-otel not installed - falling back to no-op tracer. "
             "Install with: pip install arize-phoenix-otel"
         )
         trace.set_tracer_provider(TracerProvider())
     except Exception:
-        logger.exception("Failed to initialize Phoenix OTEL — falling back to no-op tracer")
+        logger.exception("Failed to initialize Phoenix OTEL - falling back to no-op tracer")
         trace.set_tracer_provider(TracerProvider())
 
 
@@ -240,7 +240,7 @@ def _instrument_fastapi() -> None:
         )
         logger.info("FastAPI auto-instrumentation enabled")
     except ImportError:
-        logger.debug("opentelemetry-instrumentation-fastapi not installed — skipping")
+        logger.debug("opentelemetry-instrumentation-fastapi not installed - skipping")
 
 
 def _instrument_httpx() -> None:
@@ -250,7 +250,7 @@ def _instrument_httpx() -> None:
         HTTPXClientInstrumentor().instrument()
         logger.info("httpx auto-instrumentation enabled")
     except ImportError:
-        logger.debug("opentelemetry-instrumentation-httpx not installed — skipping")
+        logger.debug("opentelemetry-instrumentation-httpx not installed - skipping")
 
 
 def _instrument_openai() -> None:
@@ -260,7 +260,7 @@ def _instrument_openai() -> None:
         OpenAIInstrumentor().instrument()
         logger.info("OpenAI (OpenInference) auto-instrumentation enabled")
     except ImportError:
-        logger.debug("openinference-instrumentation-openai not installed — skipping")
+        logger.debug("openinference-instrumentation-openai not installed - skipping")
 
 
 def _instrument_redis() -> None:
@@ -270,7 +270,7 @@ def _instrument_redis() -> None:
         RedisInstrumentor().instrument()
         logger.info("Redis auto-instrumentation enabled")
     except ImportError:
-        logger.debug("opentelemetry-instrumentation-redis not installed — skipping")
+        logger.debug("opentelemetry-instrumentation-redis not installed - skipping")
 
 
 def _instrument_sqlalchemy(engine: Any) -> None:
@@ -286,7 +286,7 @@ def _instrument_sqlalchemy(engine: Any) -> None:
             SQLAlchemyInstrumentor().instrument()
             logger.info("SQLAlchemy auto-instrumentation enabled (global)")
     except ImportError:
-        logger.debug("opentelemetry-instrumentation-sqlalchemy not installed — skipping")
+        logger.debug("opentelemetry-instrumentation-sqlalchemy not installed - skipping")
     except Exception:
         logger.debug("SQLAlchemy instrumentation skipped (engine not compatible)")
 
@@ -299,4 +299,4 @@ def _instrument_logging() -> None:
         LoggingInstrumentor().instrument(set_logging_format=True)
         logger.info("Log-trace correlation enabled (trace_id/span_id injected into log records)")
     except ImportError:
-        logger.debug("opentelemetry-instrumentation-logging not installed — skipping")
+        logger.debug("opentelemetry-instrumentation-logging not installed - skipping")

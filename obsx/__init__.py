@@ -1,5 +1,5 @@
 """
-Observability — Plug-and-play Phoenix OTEL tracing + Prometheus metrics for Python services.
+Observability - Plug-and-play Phoenix OTEL tracing + Prometheus metrics for Python services.
 
 Usage in any service's main.py:
 

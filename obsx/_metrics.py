@@ -54,7 +54,7 @@ def get_meter(name: str, version: str = "") -> Meter:
     """Get an OTEL Meter for creating instruments.
 
     Args:
-        name: Meter name, typically the service or module name (e.g. "cognitx.analytics").
+        name: Meter name, typically the service or module name (e.g. "myapp.analytics").
         version: Optional version string.
     """
     return metrics.get_meter(name, version)
@@ -108,7 +108,7 @@ def llm_metric_views() -> list[View]:
         from observability._metrics import llm_metric_views
         MeterProvider(views=llm_metric_views(), ...)
 
-    Views match on metric name patterns — any histogram ending in _duration_seconds
+    Views match on metric name patterns - any histogram ending in _duration_seconds
     gets LLM buckets, any ending in _tokens gets token-count buckets.
     """
     return [

@@ -55,7 +55,7 @@ class RequestMetricsMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         app,  # type: ignore[no-untyped-def]
-        service_name: str = "cognitx",
+        service_name: str = "app",
         known_routes: list[str] | None = None,
     ):
         super().__init__(app)
