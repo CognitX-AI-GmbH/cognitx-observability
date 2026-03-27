@@ -33,9 +33,12 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-grpc>=1.40.0",
     "opentelemetry-exporter-prometheus>=0.61b0",
 
-    # Auto-instrumentation (always available)
+    # Auto-instrumentation (all included - they degrade gracefully if client libs missing)
     "opentelemetry-instrumentation-fastapi>=0.61b0",
     "opentelemetry-instrumentation-httpx>=0.61b0",
+    "opentelemetry-instrumentation-redis>=0.61b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.61b0",
+    "opentelemetry-instrumentation-logging>=0.61b0",
 
     # Prometheus client (for /metrics endpoint)
     "prometheus-client>=0.24.1",
@@ -52,10 +55,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-redis = ["opentelemetry-instrumentation-redis>=0.61b0"]
-sqlalchemy = ["opentelemetry-instrumentation-sqlalchemy>=0.61b0"]
-logging = ["opentelemetry-instrumentation-logging>=0.61b0"]
-all = ["obsx[redis,sqlalchemy,logging]"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
