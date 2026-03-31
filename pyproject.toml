@@ -63,7 +63,11 @@ dev = [
 ]
 
 [project.urls]
+Homepage = "https://github.com/CognitX-AI-GmbH/cognitx-observability"
 Repository = "https://github.com/CognitX-AI-GmbH/cognitx-observability"
+Documentation = "https://github.com/CognitX-AI-GmbH/cognitx-observability#readme"
+Issues = "https://github.com/CognitX-AI-GmbH/cognitx-observability/issues"
+Changelog = "https://github.com/CognitX-AI-GmbH/cognitx-observability/releases"
 
 [tool.hatch.build.targets.wheel]
 packages = ["obsx"]
