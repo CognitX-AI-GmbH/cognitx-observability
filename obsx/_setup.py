@@ -18,7 +18,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON, TraceIdRatioBased
 
-logger = logging.getLogger("obsx")
+logger = logging.getLogger("obsx.setup")
 
 _initialized = False
 

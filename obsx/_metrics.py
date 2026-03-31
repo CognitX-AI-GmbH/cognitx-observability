@@ -34,19 +34,30 @@ TOKEN_COUNT_BUCKETS = (
 )
 
 
+_cached_router: APIRouter | None = None
+
+
 def metrics_router(path: str = "/metrics", include_in_schema: bool = False) -> APIRouter:
     """Return a FastAPI router with a GET /metrics endpoint for Prometheus scraping.
+
+    Idempotent: returns the same router instance on repeated calls to avoid
+    duplicate route registration.
 
     Args:
         path: URL path for the metrics endpoint.
         include_in_schema: Whether to include in OpenAPI docs.
     """
+    global _cached_router
+    if _cached_router is not None:
+        return _cached_router
+
     router = APIRouter(tags=["observability"])
 
     @router.get(path, include_in_schema=include_in_schema)
     async def prometheus_metrics() -> Response:
         return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+    _cached_router = router
     return router
 
 
