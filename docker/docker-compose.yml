@@ -1,4 +1,4 @@
-name: cognitx-core-observability
+name: cognitx-observability
 
 # Observability Stack for CognitX Backend Services
 #
@@ -20,7 +20,7 @@ services:
   # Phoenix - LLM Observability (traces, spans, evaluations)
   phoenix:
     image: arizephoenix/phoenix:version-13.11.0
-    container_name: cognitx-core-phoenix
+    container_name: cognitx-phoenix
     restart: unless-stopped
     env_file:
       - .env
@@ -44,11 +44,12 @@ services:
     networks:
       - observability
       - cognitx_core_network
+      - cognitx_serving_network
 
   # Phoenix PostgreSQL - Production trace storage
   phoenix-db:
     image: postgres:17-alpine
-    container_name: cognitx-core-phoenix-db
+    container_name: cognitx-phoenix-db
     restart: unless-stopped
     env_file:
       - .env
@@ -70,7 +71,7 @@ services:
   # Prometheus - Metrics scraping & storage
   prometheus:
     image: prom/prometheus:v3.10.0
-    container_name: cognitx-core-prometheus
+    container_name: cognitx-prometheus
     restart: unless-stopped
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -84,7 +85,7 @@ services:
       - ./prometheus-alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
       interval: 10s
@@ -94,11 +95,12 @@ services:
     networks:
       - observability
       - cognitx_core_network
+      - cognitx_serving_network
 
   # Grafana - Dashboards & visualization
   grafana:
     image: grafana/grafana:12.3.5
-    container_name: cognitx-core-grafana
+    container_name: cognitx-grafana
     restart: unless-stopped
     env_file:
       - .env
@@ -111,7 +113,7 @@ services:
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     ports:
-      - "${GRAFANA_PORT:-3001}:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
     depends_on:
       prometheus:
         condition: service_healthy
@@ -135,4 +137,7 @@ networks:
     driver: bridge
   cognitx_core_network:
     name: cognitx_core_network
+    external: true
+  cognitx_serving_network:
+    name: cognitx_serving_network
     external: true
