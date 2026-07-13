@@ -72,3 +72,76 @@ groups:
           severity: warning
         annotations:
           summary: "Prometheus using >2GB memory"
+
+  # ── DBOS workflow health (WP5) ──────────────────────────────────────
+  # Sources: the intelligence /metrics gauges from app/dbos/metrics.py
+  # (60s snapshot refresh). Recovery model: DBOS recovers in-flight
+  # workflows only for a matching (executor_id, application_version) —
+  # see cognitx-core DBOS_RECOVERY_RUNBOOK.md for the levers.
+  - name: dbos_workflow_health
+    rules:
+      # Recovery lag / stranded runs. IMPORTANT: PENDING includes
+      # LEGITIMATELY parked approvals and durable waits (up to 30d by
+      # design), so age alone cannot prove a strand — hence two tiers and
+      # an explicitly investigative summary. The runbook query (PENDING
+      # rows grouped by executor_id vs live pods) is the confirmation.
+      - alert: DBOSPendingAgeHigh
+        expr: dbos_oldest_pending_age_seconds > 86400
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "Oldest PENDING DBOS workflow older than 24h"
+          description: >-
+            May be a legitimately parked approval/wait — confirm owners:
+            SELECT executor_id, count(*) FROM dbos.workflow_status WHERE
+            status='PENDING' GROUP BY 1, then compare against live pods
+            (DBOS_RECOVERY_RUNBOOK.md).
+      - alert: DBOSPendingAgeCritical
+        expr: dbos_oldest_pending_age_seconds > 8 * 86400
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "PENDING DBOS workflow older than 8 days — likely stranded"
+          description: >-
+            Past every default approval timeout; if its executor_id has no
+            live pod, re-home via the admin recovery lever
+            (DBOS_RECOVERY_RUNBOOK.md).
+
+      # Failure-rate spike over the trailing hour (domain terminal mix).
+      - alert: DBOSWorkflowFailureSpike
+        expr: >
+          sum(workflow_runs_terminal_1h{status=~"failed|timed_out"})
+          /
+          clamp_min(sum(workflow_runs_terminal_1h), 1)
+          > 0.3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Workflow failure rate >30% over the last hour"
+          description: "{{ $value | humanizePercentage }} of terminal runs failed/timed out."
+
+      # Retention broken: the WP3 daily GC keeps dbos.workflow_status
+      # bounded; sustained growth past the cap means the job is dead.
+      - alert: DBOSSystemTableUnbounded
+        expr: dbos_system_rows_total > 2000000
+        for: 6h
+        labels:
+          severity: warning
+        annotations:
+          summary: "dbos.workflow_status exceeds 2M rows — retention GC not running?"
+          description: "Check the dbos_system_retention_gc scheduled task and its logs."
+
+      # The gauges themselves went away: exporter/scheduler/scrape dead.
+      # ServiceDown covers a dead pod; this covers a live pod whose
+      # metrics refresh stopped (scheduler wedge).
+      - alert: DBOSMetricsStale
+        expr: absent(dbos_oldest_pending_age_seconds)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DBOS health gauges absent for 15m"
+          description: "dbos_metrics_refresh task or the /metrics pipeline is down."

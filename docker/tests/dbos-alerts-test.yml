@@ -1,0 +1,114 @@
+# promtool unit tests for the dbos_workflow_health alert group (WP5).
+# Run: promtool test rules docker/tests/dbos-alerts-test.yml
+rule_files:
+  - ../prometheus-alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # ── Recovery lag: two tiers, and quiet when young ────────────────────
+  - interval: 1m
+    input_series:
+      - series: 'dbos_oldest_pending_age_seconds{job="intelligence"}'
+        values: "700000x120" # ~8.1 days, sustained 2h
+    alert_rule_test:
+      - eval_time: 95m
+        alertname: DBOSPendingAgeCritical
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: intelligence
+            exp_annotations:
+              summary: "PENDING DBOS workflow older than 8 days — likely stranded"
+              description: >-
+                Past every default approval timeout; if its executor_id has no
+                live pod, re-home via the admin recovery lever
+                (DBOS_RECOVERY_RUNBOOK.md).
+      - eval_time: 45m
+        alertname: DBOSPendingAgeHigh
+        exp_alerts:
+          - exp_labels:
+              severity: info
+              job: intelligence
+            exp_annotations:
+              summary: "Oldest PENDING DBOS workflow older than 24h"
+              description: >-
+                May be a legitimately parked approval/wait — confirm owners:
+                SELECT executor_id, count(*) FROM dbos.workflow_status WHERE
+                status='PENDING' GROUP BY 1, then compare against live pods
+                (DBOS_RECOVERY_RUNBOOK.md).
+
+  - interval: 1m
+    input_series:
+      - series: 'dbos_oldest_pending_age_seconds{job="intelligence"}'
+        values: "3600x120" # one hour old — a normal parked run
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: DBOSPendingAgeHigh
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: DBOSPendingAgeCritical
+        exp_alerts: []
+      # A present series must also keep the staleness alert quiet.
+      - eval_time: 60m
+        alertname: DBOSMetricsStale
+        exp_alerts: []
+
+  # ── Failure spike: fires at 50%, quiet at 10% ────────────────────────
+  - interval: 1m
+    input_series:
+      - series: 'workflow_runs_terminal_1h{status="failed",job="intelligence"}'
+        values: "5x30"
+      - series: 'workflow_runs_terminal_1h{status="completed",job="intelligence"}'
+        values: "5x30"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: DBOSWorkflowFailureSpike
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Workflow failure rate >30% over the last hour"
+              description: "50% of terminal runs failed/timed out."
+
+  - interval: 1m
+    input_series:
+      - series: 'workflow_runs_terminal_1h{status="failed",job="intelligence"}'
+        values: "1x30"
+      - series: 'workflow_runs_terminal_1h{status="completed",job="intelligence"}'
+        values: "9x30"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: DBOSWorkflowFailureSpike
+        exp_alerts: []
+
+  # ── Retention watchdog ───────────────────────────────────────────────
+  - interval: 1m
+    input_series:
+      - series: 'dbos_system_rows_total{job="intelligence"}'
+        values: "3000000x400" # >2M sustained beyond the 6h for-window
+    alert_rule_test:
+      - eval_time: 370m
+        alertname: DBOSSystemTableUnbounded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: intelligence
+            exp_annotations:
+              summary: "dbos.workflow_status exceeds 2M rows — retention GC not running?"
+              description: "Check the dbos_system_retention_gc scheduled task and its logs."
+
+  # ── Staleness: gauges absent fires after 15m ─────────────────────────
+  - interval: 1m
+    input_series:
+      - series: 'up{job="intelligence"}'
+        values: "1x60" # pod alive, but no dbos gauges at all
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: DBOSMetricsStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "DBOS health gauges absent for 15m"
+              description: "dbos_metrics_refresh task or the /metrics pipeline is down."
