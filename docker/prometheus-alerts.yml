@@ -53,6 +53,32 @@ groups:
           summary: "High API latency on {{ $labels.service }}"
           description: "p95 latency is {{ $value | humanizeDuration }} (threshold: 2s)."
 
+  - name: internal_events
+    rules:
+      # Internal-event dispatch lag: the oldest undispatched event has been
+      # waiting >5m. The listener wakes in <1s and the fallback sweep runs
+      # every minute, so 5m means BOTH the listener and the fallback are
+      # failing (or dispatch keeps erroring). Backlog is degraded, not lost.
+      - alert: InternalEventDispatchLag
+        expr: workflow_event_outbox_oldest_pending_age_seconds > 300
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Internal-event outbox dispatch lag on {{ $labels.service }}"
+          description: "Oldest pending internal event is {{ $value | humanizeDuration }} old (threshold 5m). Check the outbox listener + fallback sweep."
+
+      # Any dead-lettered event: a row failed dispatch 8x and now needs a
+      # manual requeue (runbook). Never expected in steady state, so page.
+      - alert: InternalEventDeadLettered
+        expr: workflow_event_outbox_dead_total > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dead-lettered internal event(s) on {{ $labels.service }}"
+          description: "{{ $value }} internal-event row(s) are dead-lettered and will not retry. Inspect + requeue per the runbook."
+
   - name: infrastructure
     rules:
       # Prometheus scrape failures
