@@ -1,0 +1,120 @@
+# SLOs as code for the cognitx-lite intelligence service (D1 of the
+# "Intelligence Next Level" plan, 2026-09-14). Every series here is one
+# the service exports under its ``cognitx_`` OTEL prefix; a series that
+# has never been observed is ABSENT, not zero, so the alerts guard with
+# ``or vector(0)`` only where absence must not page.
+#
+# Lint: promtool check rules docker/prometheus-lite-slo.yml
+groups:
+  - name: cognitx_intelligence_slo
+    interval: 30s
+    rules:
+      # Turn p95 latency by domain (orchestrator runs), 5m window.
+      - record: cognitx:turn_latency_seconds:p95_5m
+        expr: >
+          histogram_quantile(0.95,
+            sum by (le, domain) (rate(cognitx_runtime_run_duration_seconds_bucket[5m])))
+      # Tick lateness: how late a fire slot ran versus its schedule, p95 over 1h.
+      - record: cognitx:tick_lateness_seconds:p95_1h
+        expr: >
+          histogram_quantile(0.95,
+            sum by (le) (rate(cognitx_automation_fire_drift_seconds_bucket[1h])))
+      # Tick failure ratio over 1h (failed / all outcomes).
+      - record: cognitx:tick_failure_ratio:1h
+        expr: >
+          sum(rate(cognitx_automation_ticks_total{outcome="failed"}[1h]))
+          / clamp_min(sum(rate(cognitx_automation_ticks_total[1h])), 1e-9)
+      # First-attempt success of tool dispatches over 1h (1 - error ratio).
+      - record: cognitx:first_attempt_success_ratio:1h
+        expr: >
+          1 - (
+            sum(rate(cognitx_tool_call_errors_total[1h]))
+            / clamp_min(sum(rate(cognitx_tool_calls_total[1h])), 1e-9)
+          )
+      # Park rate: parked manifests per tick over 1h.
+      - record: cognitx:park_rate:1h
+        expr: >
+          sum(rate(cognitx_automation_park_events_total{event="parked"}[1h]))
+          / clamp_min(sum(rate(cognitx_automation_ticks_total[1h])), 1e-9)
+      # Budget skips in the last hour (an automation that could not run for money).
+      - record: cognitx:budget_skips:1h
+        expr: sum(increase(cognitx_automation_budget_skips_total[1h])) or vector(0)
+      # Reconciler lag: discrepancies found per reconciliation over 1h.
+      - record: cognitx:reconcile_discrepancies_per_run:1h
+        expr: >
+          sum(increase(cognitx_automation_reconcile_discrepancies_total[1h]))
+          / clamp_min(sum(increase(cognitx_automation_reconciliations_total[1h])), 1)
+      # Sandbox / provider capacity failures in the last 15 minutes.
+      - record: cognitx:capacity_failures:15m
+        expr: sum(increase(cognitx_automation_capacity_failures_total[15m])) or vector(0)
+      # Background job start lag p95 by kind, 5m (ticks are background jobs).
+      - record: cognitx:bg_job_start_lag_seconds:p95_5m
+        expr: >
+          histogram_quantile(0.95,
+            sum by (le, kind) (rate(cognitx_bg_job_start_lag_seconds_bucket[5m])))
+
+  - name: cognitx_intelligence_alerts
+    rules:
+      - alert: LiteTurnLatencyHigh
+        expr: cognitx:turn_latency_seconds:p95_5m > 90
+        for: 10m
+        labels: {severity: warning, service: intelligence}
+        annotations:
+          summary: "Turn p95 latency above 90s for {{ $labels.domain }}"
+          description: "p95 of orchestrator run duration is {{ $value | humanizeDuration }} over 5m."
+      - alert: LiteTickLatenessHigh
+        expr: cognitx:tick_lateness_seconds:p95_1h > 120
+        for: 15m
+        labels: {severity: warning, service: intelligence}
+        annotations:
+          summary: "Automation ticks run more than 2 minutes late (p95)"
+          description: "Fire drift p95 is {{ $value | humanizeDuration }}; check the planner interval and the job runner."
+      - alert: LiteTickFailureRatioHigh
+        expr: cognitx:tick_failure_ratio:1h > 0.2 and sum(increase(cognitx_automation_ticks_total[1h])) >= 5
+        for: 30m
+        labels: {severity: critical, service: intelligence}
+        annotations:
+          summary: "More than 20% of automation ticks failed in the last hour"
+          description: "Failure ratio {{ $value | humanizePercentage }} with at least 5 ticks in the window."
+      - alert: LiteFirstAttemptSuccessLow
+        expr: cognitx:first_attempt_success_ratio:1h < 0.7 and sum(increase(cognitx_tool_calls_total[1h])) >= 20
+        for: 30m
+        labels: {severity: warning, service: intelligence}
+        annotations:
+          summary: "Fewer than 70% of tool dispatches succeed on the first attempt"
+          description: "Success ratio {{ $value | humanizePercentage }} over 1h; drift between the prompt contract and the sandbox is the usual cause."
+      - alert: LiteParkRateHigh
+        expr: cognitx:park_rate:1h > 0.5 and sum(increase(cognitx_automation_ticks_total[1h])) >= 5
+        for: 1h
+        labels: {severity: warning, service: intelligence}
+        annotations:
+          summary: "More than half of the ticks parked their actions"
+          description: "Park rate {{ $value | humanizePercentage }}: envelopes or seals are missing for what the automations want to do."
+      - alert: LiteBudgetSkips
+        expr: cognitx:budget_skips:1h > 0
+        for: 5m
+        labels: {severity: warning, service: intelligence}
+        annotations:
+          summary: "An automation was skipped for budget in the last hour"
+          description: "{{ $value }} budget skip(s): the owner needs the remedy (raise the budget, or seal the run)."
+      - alert: LiteReconcilerDiscrepancies
+        expr: cognitx:reconcile_discrepancies_per_run:1h > 0
+        for: 15m
+        labels: {severity: critical, service: intelligence}
+        annotations:
+          summary: "The reconciler found fired-but-unrecorded or recorded-but-unfired actions"
+          description: "{{ $value }} discrepancies per reconciliation over 1h; the relay ledger and the engine disagree."
+      - alert: LiteCapacityFailures
+        expr: cognitx:capacity_failures:15m > 0
+        for: 5m
+        labels: {severity: warning, service: intelligence}
+        annotations:
+          summary: "Provider or sandbox capacity failures in the last 15 minutes"
+          description: "{{ $value }} capacity failure(s); an outage must read as an outage, not as a broken fleet."
+      - alert: LiteBackgroundJobStartLagHigh
+        expr: cognitx:bg_job_start_lag_seconds:p95_5m > 30
+        for: 10m
+        labels: {severity: warning, service: intelligence}
+        annotations:
+          summary: "Background jobs ({{ $labels.kind }}) start more than 30s after enqueue (p95)"
+          description: "Start lag p95 is {{ $value | humanizeDuration }}; the job runner is saturated or stalled."

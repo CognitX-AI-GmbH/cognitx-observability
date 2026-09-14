@@ -1,0 +1,16 @@
+name: rules
+on:
+  pull_request:
+    paths: ["docker/prometheus*.yml", "Makefile"]
+  push:
+    branches: [main]
+    paths: ["docker/prometheus*.yml", "Makefile"]
+jobs:
+  promtool:
+    runs-on: ubuntu-latest
+    container: prom/prometheus:v3.10.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: lint the Prometheus config and every rules file
+        run: |
+          promtool check rules docker/prometheus-alerts.yml docker/prometheus-lite-slo.yml

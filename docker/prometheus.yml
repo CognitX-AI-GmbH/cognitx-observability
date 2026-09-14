@@ -10,6 +10,7 @@ global:
 
 rule_files:
   - /etc/prometheus/alerts.yml
+  - /etc/prometheus/lite-slo.yml
 
 scrape_configs:
   # ── Application Services ──
