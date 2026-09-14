@@ -1,0 +1,17 @@
+name: dashboards
+on:
+  pull_request:
+    paths: ["docker/grafana/dashboards/**", "scripts/check_dashboards.py", "Makefile"]
+  push:
+    branches: [main]
+    paths: ["docker/grafana/dashboards/**", "scripts/check_dashboards.py", "Makefile"]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: check every dashboard
+        run: python3 scripts/check_dashboards.py
