@@ -171,3 +171,33 @@ groups:
         annotations:
           summary: "DBOS health gauges absent for 15m"
           description: "dbos_metrics_refresh task or the /metrics pipeline is down."
+
+      # C2: the two metering ledgers disagree. cognitx-lite counts every
+      # model call it makes; cognitx-serving counts every request it
+      # authenticated for the same organization. A sustained gap is
+      # either a call one side never recorded or a record the other
+      # dropped — and before the nightly reconciliation existed, both
+      # looked exactly like nothing at all.
+      #
+      # 2% is the plan's bar and a healthy pair measures 0. Sustained for
+      # 2h so one late-arriving outbox batch does not page anyone.
+      - alert: UsageLedgerDrift
+        expr: max_over_time(usage_reconciliation_drift_ratio[2h]) > 0.02
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Metering ledgers disagree by {{ $value | humanizePercentage }} on {{ $labels.model }}"
+          description: "cognitx-lite's usage_events and cognitx-serving's usage_record disagree for this model. Read the usage_reconciliation audit row for the per-model counts."
+
+      # The comparison could not be made at all — serving unreachable,
+      # the door refused, or the job never ran. A reconciliation that
+      # silently stops running is worse than one that reports drift.
+      - alert: UsageReconciliationUnavailable
+        expr: increase(usage_reconciliation_unavailable_total[25h]) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Usage reconciliation could not read serving's ledger"
+          description: "The nightly comparison returned UNKNOWN, not clean. Check cognitx-serving's /v1/usage/by-model and the intelligence job log."
