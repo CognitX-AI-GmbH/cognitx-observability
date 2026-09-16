@@ -271,11 +271,28 @@ docker compose up -d
 | Phoenix | `:6006` | LLM trace visualization UI |
 | Phoenix DB | internal | PostgreSQL backend for traces |
 | Prometheus | `:9090` | Metrics scraping and storage |
-| Grafana | `:3001` | Dashboards and alerting |
+| Grafana | `:3001` | Dashboards |
+| Alertmanager | `:9093` | Delivers Prometheus alerts by email (`ALERT_*` in `.env`) |
 
 ### Prometheus Configuration
 
-`docker/prometheus.yml` - scrape config for your services:
+`docker/prometheus/` is mounted as a directory at `/etc/prometheus`
+(never single files: git replaces files by inode, and a file bind mount
+keeps serving the deleted copy). After changing it, reload with
+`curl -X POST 127.0.0.1:9090/-/reload`; after changing the compose file
+itself, recreate the container.
+
+- `prometheus.yml` - scrape config and the Alertmanager target
+- `rules/*.yml` - alert and recording rules; every alert has a
+  `runbook_url` into [docs/runbooks/alerts.md](docs/runbooks/alerts.md)
+- `metrics-catalog.txt` - every metric a rule may read, with its emitter
+- `tests/alerts-test.yml` - promtool unit tests
+
+`make check` lints all of it (promtool, amtool, `scripts/check_rules.py`,
+dashboards) through the pinned images. `make alert-test` fires a synthetic
+alert and waits for it in mailpit.
+
+Adding a scrape target:
 
 ```yaml
 scrape_configs:

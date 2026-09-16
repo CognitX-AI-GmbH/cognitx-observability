@@ -4,7 +4,7 @@
 # has never been observed is ABSENT, not zero, so the alerts guard with
 # ``or vector(0)`` only where absence must not page.
 #
-# Lint: promtool check rules docker/prometheus-lite-slo.yml
+# Lint: make check (promtool + scripts/check_rules.py)
 groups:
   - name: cognitx_intelligence_slo
     interval: 30s
@@ -62,6 +62,7 @@ groups:
         annotations:
           summary: "Turn p95 latency above 90s for {{ $labels.domain }}"
           description: "p95 of orchestrator run duration is {{ $value | humanizeDuration }} over 5m."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#liteturnlatencyhigh"
       - alert: LiteTickLatenessHigh
         expr: cognitx:tick_lateness_seconds:p95_1h > 120
         for: 15m
@@ -69,6 +70,7 @@ groups:
         annotations:
           summary: "Automation ticks run more than 2 minutes late (p95)"
           description: "Fire drift p95 is {{ $value | humanizeDuration }}; check the planner interval and the job runner."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#liteticklatenesshigh"
       - alert: LiteTickFailureRatioHigh
         expr: cognitx:tick_failure_ratio:1h > 0.2 and sum(increase(cognitx_automation_ticks_total[1h])) >= 5
         for: 30m
@@ -76,6 +78,7 @@ groups:
         annotations:
           summary: "More than 20% of automation ticks failed in the last hour"
           description: "Failure ratio {{ $value | humanizePercentage }} with at least 5 ticks in the window."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#litetickfailureratiohigh"
       - alert: LiteFirstAttemptSuccessLow
         expr: cognitx:first_attempt_success_ratio:1h < 0.7 and sum(increase(cognitx_tool_calls_total[1h])) >= 20
         for: 30m
@@ -83,6 +86,7 @@ groups:
         annotations:
           summary: "Fewer than 70% of tool dispatches succeed on the first attempt"
           description: "Success ratio {{ $value | humanizePercentage }} over 1h; drift between the prompt contract and the sandbox is the usual cause."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#litefirstattemptsuccesslow"
       - alert: LiteParkRateHigh
         expr: cognitx:park_rate:1h > 0.5 and sum(increase(cognitx_automation_ticks_total[1h])) >= 5
         for: 1h
@@ -90,6 +94,7 @@ groups:
         annotations:
           summary: "More than half of the ticks parked their actions"
           description: "Park rate {{ $value | humanizePercentage }}: envelopes or seals are missing for what the automations want to do."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#liteparkratehigh"
       - alert: LiteBudgetSkips
         expr: cognitx:budget_skips:1h > 0
         for: 5m
@@ -97,6 +102,7 @@ groups:
         annotations:
           summary: "An automation was skipped for budget in the last hour"
           description: "{{ $value }} budget skip(s): the owner needs the remedy (raise the budget, or seal the run)."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#litebudgetskips"
       - alert: LiteReconcilerDiscrepancies
         expr: cognitx:reconcile_discrepancies_per_run:1h > 0
         for: 15m
@@ -104,6 +110,7 @@ groups:
         annotations:
           summary: "The reconciler found fired-but-unrecorded or recorded-but-unfired actions"
           description: "{{ $value }} discrepancies per reconciliation over 1h; the relay ledger and the engine disagree."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#litereconcilerdiscrepancies"
       - alert: LiteCapacityFailures
         expr: cognitx:capacity_failures:15m > 0
         for: 5m
@@ -111,6 +118,7 @@ groups:
         annotations:
           summary: "Provider or sandbox capacity failures in the last 15 minutes"
           description: "{{ $value }} capacity failure(s); an outage must read as an outage, not as a broken fleet."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#litecapacityfailures"
       - alert: LiteBackgroundJobStartLagHigh
         expr: cognitx:bg_job_start_lag_seconds:p95_5m > 30
         for: 10m
@@ -118,3 +126,4 @@ groups:
         annotations:
           summary: "Background jobs ({{ $labels.kind }}) start more than 30s after enqueue (p95)"
           description: "Start lag p95 is {{ $value | humanizeDuration }}; the job runner is saturated or stalled."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#litebackgroundjobstartlaghigh"

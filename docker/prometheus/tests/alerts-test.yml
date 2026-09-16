@@ -1,0 +1,201 @@
+# promtool unit tests. Run: make test-rules
+# Each test feeds the series the service REALLY exports (names as in
+# docker/prometheus/metrics-catalog.txt), so a rule that reads a
+# misspelled metric fails here instead of staying silent in production.
+rule_files:
+  - ../rules/alerts.yml
+  - ../rules/lite-slo.yml
+
+evaluation_interval: 1m
+
+tests:
+  # ── UsageLedgerDrift reads the prefixed gauge ───────────────────────
+  - interval: 1m
+    input_series:
+      - series: 'cognitx_usage_reconciliation_drift_ratio{job="intelligence",model="opus"}'
+        values: "0.05x300"
+      - series: 'cognitx_usage_reconciliation_drift_ratio{job="intelligence",model="haiku"}'
+        values: "0x300"
+    alert_rule_test:
+      - eval_time: 125m
+        alertname: UsageLedgerDrift
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: intelligence
+              model: opus
+            exp_annotations:
+              summary: "Metering ledgers disagree by 5% on opus"
+              description: "cognitx-lite's usage_events and cognitx-serving's usage_record disagree for this model. Read the usage_reconciliation audit row for the per-model counts."
+              runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#usageledgerdrift"
+
+  # ── UsageReconciliationUnavailable reads the prefixed counter ────────
+  - interval: 1m
+    input_series:
+      - series: 'cognitx_usage_reconciliation_unavailable_total{job="intelligence"}'
+        values: "0 0 0 1+0x60"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: UsageReconciliationUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: intelligence
+            exp_annotations:
+              summary: "Usage reconciliation could not read serving's ledger"
+              description: "The nightly comparison returned UNKNOWN, not clean. Check cognitx-serving's /v1/usage/by-model and the intelligence job log."
+              runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#usagereconciliationunavailable"
+
+  # ── HighErrorRate: intelligence spelling fires, low volume does not ──
+  - interval: 1m
+    input_series:
+      - series: 'cognitx_requests_total{service="intelligence",endpoint="/x"}'
+        values: "0+60x30"
+      - series: 'cognitx_request_errors_total{service="intelligence",endpoint="/x",status="503"}'
+        values: "0+30x30"
+      - series: 'http_requests_total{service="inference",http_status_code="200"}'
+        values: "0+1x30"
+      - series: 'http_requests_total{service="inference",http_status_code="500"}'
+        values: "0+1x30"
+    alert_rule_test:
+      # Inference: 50% errors, but ~10 requests per 5m -> under the volume floor.
+      - eval_time: 10m
+        alertname: HighErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: intelligence
+            exp_annotations:
+              summary: "High 5xx rate on intelligence"
+              description: "intelligence has >5% error rate (current: 50%)."
+              runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#higherrorrate"
+
+  # ── 4xx are not server errors ────────────────────────────────────────
+  - interval: 1m
+    input_series:
+      - series: 'cognitx_requests_total{service="intelligence",endpoint="/x"}'
+        values: "0+60x30"
+      - series: 'cognitx_request_errors_total{service="intelligence",endpoint="/x",status="404"}'
+        values: "0+30x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HighErrorRate
+        exp_alerts: []
+
+  # ── Platform credential rejected; a tenant key is not a page ─────────
+  - interval: 1m
+    input_series:
+      - series: 'cognitx_serving_auth_rejections_total{job="intelligence",profile="env"}'
+        values: "0 1 2 2 2 2"
+      - series: 'cognitx_serving_auth_rejections_total{job="intelligence",profile="org:42"}'
+        values: "0 5 9 9 9 9"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: LiteServingCredentialRejected
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: intelligence
+              profile: env
+            exp_annotations:
+              summary: "Serving rejected the platform credential (profile env)"
+              description: "Every LLM, embedding and rerank call on this credential fails until it is rotated."
+              runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#liteservingcredentialrejected"
+
+  # ── Readiness names the failing dimension ────────────────────────────
+  - interval: 1m
+    input_series:
+      - series: 'cognitx_readiness_check_ok{instance="i1",check="serving_credential"}'
+        values: "1 0 0 0 0"
+      - series: 'cognitx_readiness_check_ok{instance="i1",check="database"}'
+        values: "1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: LiteReadinessDimensionFailing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: intelligence
+              instance: i1
+              check: serving_credential
+            exp_annotations:
+              summary: "Readiness check serving_credential fails on i1"
+              description: "The pod reports NOT ready because of this one dimension; GET /health-check/ready names the error."
+              runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#litereadinessdimensionfailing"
+
+  # ── Unverified resolutions page; a clean redispatch does not ─────────
+  - interval: 1m
+    input_series:
+      - series: 'cognitx_runtime_dispatch_resolutions_total{decision="report",reason="lakehouse_unknown"}'
+        values: "0 1 1 1"
+      - series: 'cognitx_runtime_dispatch_resolutions_total{decision="redispatch",reason="clean"}'
+        values: "0 7 9 9"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: LiteDispatchResolvedUnknown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: intelligence
+              reason: lakehouse_unknown
+            exp_annotations:
+              summary: "Resumed turns could not verify interrupted calls (lakehouse_unknown)"
+              description: "1 dispatch(es) in the last hour were reported to the user as unverifiable."
+              runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#litedispatchresolvedunknown"
+
+  # ── Snapshot reads failing ───────────────────────────────────────────
+  - interval: 1m
+    input_series:
+      - series: 'cognitx_runtime_lakehouse_snapshot_unreadable_total{phase="dispatch"}'
+        values: "0 2 2 2 2 2 2 2 2 2"
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: LiteLakehouseSnapshotUnreadable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: intelligence
+              phase: dispatch
+            exp_annotations:
+              summary: "Lakehouse snapshot reads are failing (dispatch)"
+              description: "2 unreadable snapshot read(s) in 15m; interrupted turns cannot prove their cells wrote nothing."
+              runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#litelakehousesnapshotunreadable"
+
+  # ── Park mails: volume, and a park nobody was told about ─────────────
+  - interval: 1m
+    input_series:
+      - series: 'cognitx_automation_park_emails_total{outcome="sent"}'
+        values: "0+1x80"
+      - series: 'cognitx_automation_park_emails_total{outcome="cooldown"}'
+        values: "0+5x80"
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: LiteParkMailVolumeHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: intelligence
+            exp_annotations:
+              summary: "60 park approval mails sent in the last hour"
+              description: "Owners are being flooded; an inbox like that gets filtered and the one mail that matters is lost."
+              runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#liteparkmailvolumehigh"
+      - eval_time: 75m
+        alertname: LiteParkMailNotSent
+        exp_alerts: []
+
+  # ── No Alertmanager is a critical page ───────────────────────────────
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_notifications_alertmanagers_discovered{job="prometheus"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PrometheusAlertmanagerMissing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: prometheus
+            exp_annotations:
+              summary: "Prometheus has no Alertmanager to send alerts to"
+              description: "Alerts are evaluated and delivered to nobody."
+              runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#prometheusalertmanagermissing"
