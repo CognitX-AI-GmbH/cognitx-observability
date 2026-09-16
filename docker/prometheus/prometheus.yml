@@ -35,7 +35,7 @@ scrape_configs:
         labels:
           service: "auth"
 
-  # cognitx-lite tools. /metrics exists since cognitx-lite #1258; before it
+  # cognitx-lite tools. /metrics exists since cognitx-lite #1272; before it
   # the target answered 404 and ServiceDown fired permanently.
   - job_name: "tools"
     metrics_path: /metrics

@@ -24,7 +24,7 @@ Either the service is down, or its `/metrics` endpoint is gone.
 
 **Likely causes**: the container stopped or is restarting; the port in
 `docker/prometheus/prometheus.yml` no longer matches the service; a service
-that never had `/metrics` (cognitx-lite tools until #1258).
+that never had `/metrics` (cognitx-lite tools until #1272).
 
 **Remedy**: `docker ps` for the service and restart it. A 404 means a scrape
 job for a service without an endpoint: add the endpoint or remove the job.

@@ -174,7 +174,7 @@ groups:
           runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#usagereconciliationunavailable"
 
   # Failure modes that were CORRECT and silent (plan D, 2026-09-14). Each
-  # reads a counter cognitx-lite exports since #1258.
+  # reads a counter cognitx-lite exports since #1272.
   - name: lite_silent_modes
     rules:
       # A lakehouse snapshot read failed. The dispatch row then carries no
