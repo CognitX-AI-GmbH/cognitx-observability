@@ -30,11 +30,11 @@ cognitx_request_duration_seconds_bucket                  cognitx-lite intelligen
 cognitx_runtime_run_duration_seconds_bucket              cognitx-lite intelligence/app/runtime/metrics.py
 cognitx_tool_calls_total                                 cognitx-lite intelligence/app/runtime/metrics.py
 cognitx_tool_call_errors_total                           cognitx-lite intelligence/app/runtime/metrics.py
-cognitx_runtime_lakehouse_snapshot_unreadable_total      cognitx-lite intelligence/app/runtime/metrics.py (#1258)
-cognitx_runtime_dispatch_resolutions_total               cognitx-lite intelligence/app/runtime/metrics.py (#1258)
+cognitx_runtime_lakehouse_snapshot_unreadable_total      cognitx-lite intelligence/app/runtime/dispatch_metrics.py (#1258)
+cognitx_runtime_dispatch_resolutions_total               cognitx-lite intelligence/app/runtime/dispatch_metrics.py (#1258)
 cognitx_serving_auth_rejections_total                    cognitx-lite intelligence/app/runtime/client/auth_alert.py
-cognitx_readiness_check_ok                               cognitx-lite intelligence/app/main.py _publish_readiness (#1258)
-cognitx_readiness_check_unverified                       cognitx-lite intelligence/app/main.py _publish_readiness (#1258)
+cognitx_readiness_check_ok                               cognitx-lite intelligence/app/shared/observability/readiness_metrics.py (#1258)
+cognitx_readiness_check_unverified                       cognitx-lite intelligence/app/shared/observability/readiness_metrics.py (#1258)
 cognitx_bg_job_start_lag_seconds_bucket                  cognitx-lite intelligence/app/shared/background/runner.py
 cognitx_automation_ticks_total                           cognitx-lite intelligence/app/domains/automations/metrics.py
 cognitx_automation_fire_drift_seconds_bucket             cognitx-lite intelligence/app/domains/automations/metrics.py
