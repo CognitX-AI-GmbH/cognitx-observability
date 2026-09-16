@@ -7,6 +7,7 @@ name: cognitx-observability
 #   - Phoenix DB:  PostgreSQL backend for Phoenix
 #   - Prometheus:  Metrics scraping from all services (/metrics)
 #   - Grafana:     Dashboards for Prometheus metrics
+#   - Alertmanager: Delivers Prometheus alerts by email (ALERT_* in .env)
 #
 # Usage:
 #   cd docker && docker compose up -d
@@ -15,6 +16,7 @@ name: cognitx-observability
 #   - Phoenix:     http://localhost:6006
 #   - Prometheus:  http://localhost:9090
 #   - Grafana:     http://localhost:3001
+#   - Alertmanager: http://localhost:9093
 
 services:
   # Phoenix - LLM Observability (traces, spans, evaluations)
@@ -81,9 +83,10 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./prometheus-alerts.yml:/etc/prometheus/alerts.yml:ro
-      - ./prometheus-lite-slo.yml:/etc/prometheus/lite-slo.yml:ro
+      # The DIRECTORY, never single files: git replaces a file with a new
+      # inode and a file bind mount keeps serving the deleted one (a stale
+      # alerts.yml ran for two days that way, 2026-09-14..16).
+      - ./prometheus:/etc/prometheus:ro
       - prometheus-data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
@@ -97,6 +100,35 @@ services:
       - observability
       - cognitx_core_network
       - cognitx_serving_network
+
+  # Alertmanager - routes Prometheus alerts to email
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: cognitx-alertmanager
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/etc/alertmanager/render.sh"]
+    environment:
+      - ALERT_EMAIL_TO=${ALERT_EMAIL_TO:-oncall@cognitx.local}
+      - ALERT_EMAIL_FROM=${ALERT_EMAIL_FROM:-alertmanager@cognitx.local}
+      - ALERT_SMTP_SMARTHOST=${ALERT_SMTP_SMARTHOST:-host.docker.internal:1125}
+      - ALERT_SMTP_AUTH_USERNAME=${ALERT_SMTP_AUTH_USERNAME:-}
+      - ALERT_SMTP_AUTH_PASSWORD=${ALERT_SMTP_AUTH_PASSWORD:-}
+      - ALERT_SMTP_REQUIRE_TLS=${ALERT_SMTP_REQUIRE_TLS:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9093/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - observability
 
   # Grafana - Dashboards & visualization
   grafana:
@@ -128,6 +160,7 @@ services:
       - observability
 
 volumes:
+  alertmanager-data:
   phoenix-data:
   phoenix-db-data:
   prometheus-data:

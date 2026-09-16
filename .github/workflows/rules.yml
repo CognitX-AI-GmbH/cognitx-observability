@@ -1,16 +1,39 @@
 name: rules
 on:
   pull_request:
-    paths: ["docker/prometheus*.yml", "Makefile"]
+    paths:
+      - "docker/prometheus/**"
+      - "docker/alertmanager/**"
+      - "docs/runbooks/**"
+      - "scripts/check_rules.py"
+      - "Makefile"
+      - ".github/workflows/rules.yml"
   push:
     branches: [main]
-    paths: ["docker/prometheus*.yml", "Makefile"]
+    paths:
+      - "docker/prometheus/**"
+      - "docker/alertmanager/**"
+      - "docs/runbooks/**"
+      - "scripts/check_rules.py"
+      - "Makefile"
+      - ".github/workflows/rules.yml"
 jobs:
-  promtool:
+  # Runs on the host runner and calls promtool/amtool through `docker run`.
+  # The job used to run INSIDE prom/prometheus, which has no node, so
+  # actions/checkout could never start and the job was red on every run.
+  check:
     runs-on: ubuntu-latest
-    container: prom/prometheus:v3.10.0
     steps:
       - uses: actions/checkout@v4
-      - name: lint the Prometheus config and every rules file
-        run: |
-          promtool check rules docker/prometheus-alerts.yml docker/prometheus-lite-slo.yml
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml==6.0.2
+      - name: prometheus config
+        run: make check-config
+      - name: rule syntax, metric catalogue, runbook anchors
+        run: make check-rules
+      - name: promtool unit tests
+        run: make test-rules
+      - name: alertmanager config
+        run: make check-alertmanager

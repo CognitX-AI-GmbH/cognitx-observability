@@ -10,3 +10,6 @@ build/
 .pytest_cache/
 .ruff_cache/
 *.so
+
+# Synthetic pipeline test rule (make alert-test); never committed.
+docker/prometheus/rules/synthetic.yml

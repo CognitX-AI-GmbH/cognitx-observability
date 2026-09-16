@@ -1,0 +1,80 @@
+# Prometheus scrape configuration for CognitX services
+# All services expose GET /metrics (Prometheus text format)
+#
+# Local dev: services run on the host → targets use host.docker.internal
+# Production: swap targets to container hostnames (auth:8000, etc.)
+#
+# This whole DIRECTORY is mounted at /etc/prometheus, never single files:
+# git replaces a file by writing a new inode, and a single-file bind mount
+# keeps pointing at the old one. That is how a running Prometheus kept
+# evaluating a deleted alerts.yml for two days (2026-09-14..16) and never
+# loaded UsageLedgerDrift.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # *.yml only: the synthetic pipeline test (make alert-test) drops a
+  # rules/synthetic.yml here and removes it again; it is gitignored.
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  # ── Application Services ──
+  # cognitx-serving's auth, containerized, published on host port 9000
+  # (127.0.0.1:9000->8000).
+  - job_name: "auth"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:9000"]
+        labels:
+          service: "auth"
+
+  # cognitx-lite tools. /metrics exists since cognitx-lite #1272; before it
+  # the target answered 404 and ServiceDown fired permanently.
+  - job_name: "tools"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8002"]
+        labels:
+          service: "tools"
+
+  - job_name: "intelligence"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8004"]
+        labels:
+          service: "intelligence"
+
+  # ── Inference (cognitx-serving) ──
+  - job_name: "inference"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8003"]
+        labels:
+          service: "inference"
+
+  # Removed 2026-09-16, both down on every scrape:
+  #  - "workflow" (:8005): cognitx-core's workflow service. cognitx-lite
+  #    deleted the workflow engine and DBOS (lite migration 0037); nothing
+  #    listens there.
+  #  - "sglang-gateway" (:29000): cognitx-serving's optional SGLang router,
+  #    only up under inference/compose.gateway.yml. Re-add the job next to
+  #    that compose file's profile when it runs:
+  #      - job_name: "sglang-gateway"
+  #        static_configs:
+  #          - targets: ["host.docker.internal:29000"]
+
+  # ── Self-monitoring ──
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: "alertmanager"
+    static_configs:
+      - targets: ["alertmanager:9093"]

@@ -1,0 +1,270 @@
+# Prometheus alert rules for CognitX.
+#
+# Delivery: Prometheus -> Alertmanager (docker/alertmanager) -> email.
+# Every alert carries a runbook_url that resolves to a section of
+# docs/runbooks/alerts.md; scripts/check_rules.py fails CI otherwise, and
+# fails CI when an expression names a metric that is neither in
+# docker/prometheus/metrics-catalog.txt nor a recording rule.
+#
+# Removed 2026-09-16:
+#  - dbos_workflow_health (5 alerts) and internal_events (2 alerts): they
+#    read cognitx-core's DBOS / workflow-outbox gauges. cognitx-lite deleted
+#    that engine (migration 0037) and core is not deployed, so
+#    DBOSMetricsStale fired permanently from 2026-09-14 and the rest could
+#    never fire.
+#  - ScrapeFailure: the same expression as ServiceDown (`up == 0`), so
+#    every dead target paged twice.
+
+groups:
+  - name: service_health
+    rules:
+      # Service is down (no metrics scraped for 2 minutes)
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} is down"
+          description: "{{ $labels.job }} has been unreachable for 2 minutes."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#servicedown"
+
+      # More than 5% of requests answered 5xx, with at least 20 requests in
+      # the window. The two services spell their HTTP series differently:
+      # cognitx-serving (obsx) exports http_requests_total with
+      # http_status_code; cognitx-lite intelligence exports
+      # cognitx_requests_total plus cognitx_request_errors_total{status}.
+      # Until 2026-09-16 this rule read cognitx_http_requests_total, which
+      # neither exports, so it could never fire.
+      - alert: HighErrorRate
+        expr: >
+          (
+            (
+              (
+                sum by (service) (rate(http_requests_total{http_status_code=~"5.."}[5m]))
+                / sum by (service) (rate(http_requests_total[5m]))
+              )
+              and on (service) sum by (service) (increase(http_requests_total[5m])) >= 20
+            )
+            or
+            (
+              (
+                sum by (service) (rate(cognitx_request_errors_total{status=~"5.."}[5m]))
+                / sum by (service) (rate(cognitx_requests_total[5m]))
+              )
+              and on (service) sum by (service) (increase(cognitx_requests_total[5m])) >= 20
+            )
+          )
+          > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx rate on {{ $labels.service }}"
+          description: "{{ $labels.service }} has >5% error rate (current: {{ $value | humanizePercentage }})."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#higherrorrate"
+
+      # p95 over 10s on the inference API.
+      - alert: HighLatencyInference
+        expr: >
+          histogram_quantile(0.95,
+            sum by (le, service) (rate(http_request_duration_seconds_bucket{job="inference"}[5m])))
+          > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High inference latency"
+          description: "p95 inference latency is {{ $value | humanizeDuration }} (threshold: 10s)."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#highlatencyinference"
+
+      # p95 over 2s on the intelligence API, streaming and health endpoints
+      # excluded (a chat stream is long by design; the readiness probe asks
+      # serving and sits near 2s on its own).
+      - alert: HighLatencyAPI
+        expr: >
+          histogram_quantile(0.95,
+            sum by (le, service) (rate(cognitx_request_duration_seconds_bucket{endpoint!~".*stream.*|/health.*"}[5m])))
+          > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency on {{ $labels.service }}"
+          description: "p95 latency is {{ $value | humanizeDuration }} (threshold: 2s)."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#highlatencyapi"
+
+  - name: infrastructure
+    rules:
+      # High memory on Prometheus itself
+      - alert: PrometheusHighMemory
+        expr: process_resident_memory_bytes{job="prometheus"} > 2e9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus using >2GB memory"
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#prometheushighmemory"
+
+      # Prometheus cannot hand alerts to anyone. Until 2026-09-16 this was
+      # the permanent state (activeAlertmanagers: []). Visible in the
+      # Prometheus UI even when it cannot be delivered.
+      - alert: PrometheusAlertmanagerMissing
+        expr: prometheus_notifications_alertmanagers_discovered{job="prometheus"} < 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus has no Alertmanager to send alerts to"
+          description: "Alerts are evaluated and delivered to nobody."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#prometheusalertmanagermissing"
+
+      # A rule that errors on evaluation never fires; this is the only
+      # place that says so.
+      - alert: PrometheusRuleEvaluationFailures
+        expr: sum by (rule_group) (increase(prometheus_rule_evaluation_failures_total{job="prometheus"}[10m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rule group {{ $labels.rule_group }} fails to evaluate"
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#prometheusruleevaluationfailures"
+
+      # Alertmanager tried to deliver and the receiver refused.
+      - alert: AlertmanagerNotificationsFailing
+        expr: sum by (integration) (increase(alertmanager_notifications_failed_total{job="alertmanager"}[15m])) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Alertmanager cannot deliver via {{ $labels.integration }}"
+          description: "Firing alerts are not reaching anyone. Check the SMTP settings in docker/.env."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#alertmanagernotificationsfailing"
+
+  # C2: the two metering ledgers have to agree. cognitx-lite counts every
+  # model call it makes; cognitx-serving counts every request it
+  # authenticated for the same organization. The series carry the
+  # service's `cognitx_` OTEL prefix; until 2026-09-16 both rules read the
+  # unprefixed names and could never fire.
+  - name: metering
+    rules:
+      # 2% is the plan's bar and a healthy pair measures 0. Sustained for
+      # 2h so one late-arriving outbox batch does not page anyone.
+      - alert: UsageLedgerDrift
+        expr: max_over_time(cognitx_usage_reconciliation_drift_ratio[2h]) > 0.02
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Metering ledgers disagree by {{ $value | humanizePercentage }} on {{ $labels.model }}"
+          description: "cognitx-lite's usage_events and cognitx-serving's usage_record disagree for this model. Read the usage_reconciliation audit row for the per-model counts."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#usageledgerdrift"
+
+      # The comparison could not be made at all: serving unreachable or the
+      # door refused. A reconciliation that silently stops is worse than
+      # one that reports drift.
+      - alert: UsageReconciliationUnavailable
+        expr: increase(cognitx_usage_reconciliation_unavailable_total[25h]) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Usage reconciliation could not read serving's ledger"
+          description: "The nightly comparison returned UNKNOWN, not clean. Check cognitx-serving's /v1/usage/by-model and the intelligence job log."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#usagereconciliationunavailable"
+
+  # Failure modes that were CORRECT and silent (plan D, 2026-09-14). Each
+  # reads a counter cognitx-lite exports since #1272.
+  - name: lite_silent_modes
+    rules:
+      # A lakehouse snapshot read failed. The dispatch row then carries no
+      # reading and a resume reports the call instead of re-running it:
+      # safe, and a user-visible "could not be verified".
+      - alert: LiteLakehouseSnapshotUnreadable
+        expr: sum by (phase) (increase(cognitx_runtime_lakehouse_snapshot_unreadable_total[15m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: intelligence
+        annotations:
+          summary: "Lakehouse snapshot reads are failing ({{ $labels.phase }})"
+          description: "{{ $value }} unreadable snapshot read(s) in 15m; interrupted turns cannot prove their cells wrote nothing."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#litelakehousesnapshotunreadable"
+
+      # A resumed turn reported calls as UNKNOWN instead of re-running them.
+      - alert: LiteDispatchResolvedUnknown
+        expr: sum by (reason) (increase(cognitx_runtime_dispatch_resolutions_total{decision="report", reason=~"lakehouse_unknown|effects_unknown"}[1h])) > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: intelligence
+        annotations:
+          summary: "Resumed turns could not verify interrupted calls ({{ $labels.reason }})"
+          description: "{{ $value }} dispatch(es) in the last hour were reported to the user as unverifiable."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#litedispatchresolvedunknown"
+
+      # The PLATFORM serving credential was refused on the request path.
+      # Readiness then takes the pod out of the Service, which can also
+      # take it out of scrape discovery: this counter is the signal that
+      # arrives before that happens. Tenant keys (profile org:<id>) excluded.
+      - alert: LiteServingCredentialRejected
+        expr: sum by (profile) (increase(cognitx_serving_auth_rejections_total{profile!~"org:.*"}[10m])) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: intelligence
+        annotations:
+          summary: "Serving rejected the platform credential (profile {{ $labels.profile }})"
+          description: "Every LLM, embedding and rerank call on this credential fails until it is rotated."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#liteservingcredentialrejected"
+
+      # A readiness dimension is failing on a pod that is still scraped.
+      - alert: LiteReadinessDimensionFailing
+        expr: min by (instance, check) (cognitx_readiness_check_ok) == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: intelligence
+        annotations:
+          summary: "Readiness check {{ $labels.check }} fails on {{ $labels.instance }}"
+          description: "The pod reports NOT ready because of this one dimension; GET /health-check/ready names the error."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#litereadinessdimensionfailing"
+
+      # The credential probe could not reach serving for 15 minutes, so
+      # readiness has been saying "ok" without proof.
+      - alert: LiteServingCredentialUnverified
+        expr: max by (instance) (cognitx_readiness_check_unverified{check="serving_credential"}) == 1
+        for: 15m
+        labels:
+          severity: warning
+          service: intelligence
+        annotations:
+          summary: "Serving credential unverified for 15m on {{ $labels.instance }}"
+          description: "Readiness cannot reach serving's /v1/models; the pod stays in rotation on an unproven credential."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#liteservingcredentialunverified"
+
+      # Park mails: 193 in one live day before the cooldown existed. More
+      # than 20 an hour means the cooldown is off or too many automations
+      # park on every run.
+      - alert: LiteParkMailVolumeHigh
+        expr: sum(increase(cognitx_automation_park_emails_total{outcome="sent"}[1h])) > 20
+        for: 10m
+        labels:
+          severity: warning
+          service: intelligence
+        annotations:
+          summary: "{{ $value }} park approval mails sent in the last hour"
+          description: "Owners are being flooded; an inbox like that gets filtered and the one mail that matters is lost."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#liteparkmailvolumehigh"
+
+      # A park that nobody was told about: the notifier declined or failed.
+      - alert: LiteParkMailNotSent
+        expr: sum(increase(cognitx_automation_park_emails_total{outcome="not_sent"}[1h])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: intelligence
+        annotations:
+          summary: "Park approval mails are not being sent"
+          description: "{{ $value }} parked manifest(s) in the last hour produced no mail; the park is visible only in the app."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#liteparkmailnotsent"

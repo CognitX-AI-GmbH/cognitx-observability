@@ -12,3 +12,14 @@ datasources:
     jsonData:
       timeInterval: "15s"      # matches scrape_interval
       httpMethod: POST
+
+  # Alertmanager — the alerts Prometheus fires, as Grafana sees them
+  # (Alerting -> Alert groups). Delivery is Alertmanager's, not Grafana's.
+  - name: Alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    editable: false
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: false
