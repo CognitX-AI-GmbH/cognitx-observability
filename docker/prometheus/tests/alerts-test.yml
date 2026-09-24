@@ -199,3 +199,85 @@ tests:
               summary: "Prometheus has no Alertmanager to send alerts to"
               description: "Alerts are evaluated and delivered to nobody."
               runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#prometheusalertmanagermissing"
+
+  # ── The relay outcome watchdog turned a workspace off (lite R2.8) ────
+  # Two replicas report the same tripped row (read from tools-db): one
+  # alert per workspace. The series disappears when the path is turned
+  # back on, and the alert resolves.
+  - interval: 1m
+    input_series:
+      - series: 'cognitx_tools_relay_effect_outcomes_tripped_error_rate{job="tools",service="tools",instance="tools-a:8002",workspace="11111111-2222-3333-4444-555555555555",reason="error_rate",baseline="previous_24h"}'
+        values: "_x4 0.3x10 _x10"
+      - series: 'cognitx_tools_relay_effect_outcomes_tripped_error_rate{job="tools",service="tools",instance="tools-b:8002",workspace="11111111-2222-3333-4444-555555555555",reason="error_rate",baseline="previous_24h"}'
+        values: "_x4 0.3x10 _x10"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: LiteRelayOutcomesSwitchTripped
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: LiteRelayOutcomesSwitchTripped
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: tools
+              workspace: "11111111-2222-3333-4444-555555555555"
+              reason: error_rate
+              baseline: previous_24h
+            exp_annotations:
+              summary: "Relay outcome path turned off for workspace 11111111-2222-3333-4444-555555555555 (error_rate)"
+              description: "The watchdog turned the new relay outcome path off: error_rate over its limit for 15 minutes (baseline: previous_24h). Error rate in the last 5-minute window: 30%. Sends continue on the old path. All the numbers: python -m app.cli.runtime_switches status --workspace 11111111-2222-3333-4444-555555555555"
+              runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#literelayoutcomesswitchtripped"
+      - eval_time: 22m
+        alertname: LiteRelayOutcomesSwitchTripped
+        exp_alerts: []
+
+  # ── The watchdog stopped judging while the path is on (lite R2.8) ───
+  # Passes every minute until minute 10, then none: stale from minute 25
+  # (15 minutes without a pass), firing 10 minutes later.
+  - interval: 1m
+    input_series:
+      - series: 'cognitx_tools_relay_effect_outcomes_watchdog_last_pass_seconds{job="tools",instance="tools-a:8002"}'
+        values: "0+60x10 600x50"
+      - series: 'cognitx_tools_relay_effect_outcomes_switch{job="tools",instance="tools-a:8002",workspace="11111111-2222-3333-4444-555555555555"}'
+        values: "1x60"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: LiteRelayOutcomesWatchdogStale
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: LiteRelayOutcomesWatchdogStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: tools
+            exp_annotations:
+              summary: "The relay outcome watchdog is not judging"
+              description: "The relay outcome path is on for at least one workspace and no watchdog pass has completed in the last 15 minutes; until one does, nothing turns the path off by itself."
+              runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#literelayoutcomeswatchdogstale"
+
+  # ── No pass ever, path on: stale too; path off: silent ───────────────
+  - interval: 1m
+    input_series:
+      - series: 'cognitx_tools_relay_effect_outcomes_switch{job="tools",instance="tools-a:8002",workspace="*"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: LiteRelayOutcomesWatchdogStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: tools
+            exp_annotations:
+              summary: "The relay outcome watchdog is not judging"
+              description: "The relay outcome path is on for at least one workspace and no watchdog pass has completed in the last 15 minutes; until one does, nothing turns the path off by itself."
+              runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#literelayoutcomeswatchdogstale"
+  - interval: 1m
+    input_series:
+      - series: 'cognitx_tools_relay_effect_outcomes_watchdog_last_pass_seconds{job="tools",instance="tools-a:8002"}'
+        values: "0x60"
+      - series: 'cognitx_tools_relay_effect_outcomes_switch{job="tools",instance="tools-a:8002",workspace="11111111-2222-3333-4444-555555555555"}'
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: LiteRelayOutcomesWatchdogStale
+        exp_alerts: []

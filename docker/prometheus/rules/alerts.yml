@@ -268,3 +268,45 @@ groups:
           summary: "Park approval mails are not being sent"
           description: "{{ $value }} parked manifest(s) in the last hour produced no mail; the park is visible only in the app."
           runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#liteparkmailnotsent"
+
+  # cognitx-lite saga R, R2.8: the relay's outcome path (every keyed relay
+  # call ends with an outcome row) is turned on workspace by workspace, and
+  # a watchdog inside tools turns it off by itself when, for 15 minutes in
+  # a row, more than 1% of a workspace's relay calls fail or their p95 is
+  # more than 20% above the week before. Series from
+  # tools/app/sandbox/outcome_switch_metrics.py.
+  - name: lite_relay_outcome_switch
+    rules:
+      # The watchdog turned the path off for a workspace. The series exists
+      # exactly while that workspace's latest switch row is the watchdog's
+      # off (tools reads it from its database, so every replica reports it
+      # and a restart keeps it); its value is the error rate of the last
+      # 5-minute window at the trip. Resolves when the path is turned back on.
+      - alert: LiteRelayOutcomesSwitchTripped
+        expr: max by (workspace, reason, baseline) (cognitx_tools_relay_effect_outcomes_tripped_error_rate) >= 0
+        for: 0m
+        labels:
+          severity: warning
+          service: tools
+        annotations:
+          summary: "Relay outcome path turned off for workspace {{ $labels.workspace }} ({{ $labels.reason }})"
+          description: "The watchdog turned the new relay outcome path off: {{ $labels.reason }} over its limit for 15 minutes (baseline: {{ $labels.baseline }}). Error rate in the last 5-minute window: {{ $value | humanizePercentage }}. Sends continue on the old path. All the numbers: python -m app.cli.runtime_switches status --workspace {{ $labels.workspace }}"
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#literelayoutcomesswitchtripped"
+
+      # The path is on somewhere and no watchdog pass completed for 15
+      # minutes (or none ever did): nothing turns it off by itself.
+      - alert: LiteRelayOutcomesWatchdogStale
+        expr: >
+          (
+            (time() - max(cognitx_tools_relay_effect_outcomes_watchdog_last_pass_seconds) > 900)
+            or on() absent(cognitx_tools_relay_effect_outcomes_watchdog_last_pass_seconds)
+          )
+          and on() (max(cognitx_tools_relay_effect_outcomes_switch) > 0)
+        for: 10m
+        labels:
+          severity: warning
+          service: tools
+        annotations:
+          summary: "The relay outcome watchdog is not judging"
+          description: "The relay outcome path is on for at least one workspace and no watchdog pass has completed in the last 15 minutes; until one does, nothing turns the path off by itself."
+          runbook_url: "https://github.com/CognitX-AI-GmbH/cognitx-observability/blob/main/docs/runbooks/alerts.md#literelayoutcomeswatchdogstale"

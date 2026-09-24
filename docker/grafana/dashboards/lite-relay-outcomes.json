@@ -1,0 +1,275 @@
+{
+  "uid": "cognitx-lite-relay-outcomes",
+  "title": "CognitX Lite Relay Outcome Switch",
+  "description": "Saga R, R2.8: the relay outcome path turned on workspace by workspace, the numbers its watchdog judges, and when it turned a workspace off.",
+  "tags": [
+    "cognitx",
+    "lite",
+    "tools",
+    "relay"
+  ],
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "row",
+      "title": "Relay outcome switch (saga R, R2.8)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Relay error rate per 5 minutes",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.01
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "max by (workspace) (cognitx_tools_relay_effect_outcomes_error_rate)",
+          "legendFormat": "{{workspace}}",
+          "refId": "A"
+        }
+      ],
+      "description": "Failed relay calls (error, timeout) over all calls that reached a connector, in the latest 5-minute window, per workspace whose relay outcome path is on. Above the line (1%) for three windows in a row, the watchdog turns the path off."
+    },
+    {
+      "type": "timeseries",
+      "title": "Relay p95 latency against the week before",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "max by (workspace) (cognitx_tools_relay_effect_outcomes_p95_ms)",
+          "legendFormat": "{{workspace}} p95",
+          "refId": "A"
+        },
+        {
+          "expr": "max by (workspace, baseline) (cognitx_tools_relay_effect_outcomes_baseline_p95_ms)",
+          "legendFormat": "{{workspace}} baseline ({{baseline}})",
+          "refId": "B"
+        },
+        {
+          "expr": "1.2 * max by (workspace, baseline) (cognitx_tools_relay_effect_outcomes_baseline_p95_ms)",
+          "legendFormat": "{{workspace}} limit (baseline + 20%)",
+          "refId": "C"
+        }
+      ],
+      "description": "p95 of the latest 5-minute window against the same window one week earlier (baseline=week), or the previous 24 hours when there is no week of history (baseline=previous_24h). Above the limit for three windows in a row (each with at least 20 calls), the watchdog turns the path off."
+    },
+    {
+      "type": "timeseries",
+      "title": "Relay outcome path on, per workspace",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "none",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "max by (workspace) (cognitx_tools_relay_effect_outcomes_switch)",
+          "legendFormat": "{{workspace}}",
+          "refId": "A"
+        }
+      ],
+      "description": "1 while the new relay outcome path is on for the workspace (flag, allowlist and switch rows all say yes, and the watchdog runs), 0 while off."
+    },
+    {
+      "type": "timeseries",
+      "title": "Turned off by the watchdog, and its last pass",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "max by (workspace, reason, baseline) (cognitx_tools_relay_effect_outcomes_tripped_error_rate)",
+          "legendFormat": "{{workspace}} tripped on {{reason}} (baseline {{baseline}})",
+          "refId": "A"
+        },
+        {
+          "expr": "(time() - max(cognitx_tools_relay_effect_outcomes_watchdog_last_pass_seconds)) / 900",
+          "legendFormat": "time since the last pass / 15 minutes",
+          "refId": "B"
+        }
+      ],
+      "description": "A tripped series is the error rate the watchdog turned a workspace off with; it stays until someone turns the path back on (LiteRelayOutcomesSwitchTripped). The second line crosses 1 when no pass completed for 15 minutes (LiteRelayOutcomesWatchdogStale)."
+    }
+  ]
+}
