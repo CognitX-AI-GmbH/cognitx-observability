@@ -46,3 +46,8 @@ cognitx_automation_reconciliations_total                 cognitx-lite intelligen
 cognitx_automation_reconcile_discrepancies_total         cognitx-lite intelligence/app/domains/automations/metrics.py
 cognitx_usage_reconciliation_drift_ratio                 cognitx-lite intelligence/app/runtime/usage_reconcile.py (set_gauge)
 cognitx_usage_reconciliation_unavailable_total           cognitx-lite intelligence/app/runtime/usage_reconcile.py (increment_counter)
+
+# ── cognitx-lite tools (saga R, R2.8 relay outcome switch) ──
+cognitx_tools_relay_effect_outcomes_switch               cognitx-lite tools/app/sandbox/outcome_switch_metrics.py (observable gauge)
+cognitx_tools_relay_effect_outcomes_tripped_error_rate   cognitx-lite tools/app/sandbox/outcome_switch_metrics.py (observable gauge)
+cognitx_tools_relay_effect_outcomes_watchdog_last_pass_seconds  cognitx-lite tools/app/sandbox/outcome_switch_metrics.py (observable gauge)

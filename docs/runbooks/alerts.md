@@ -388,6 +388,51 @@ down; the owner has no address.
 **Remedy**: fix the mail settings; tell the owners of parked automations
 directly until mail works.
 
+## LiteRelayOutcomesSwitchTripped
+
+**Meaning**: cognitx-lite's relay outcome watchdog turned the new relay
+outcome path (saga R, R2.2) OFF for one workspace: for 15 minutes in a
+row, more than 1% of that workspace's relay calls failed (reason
+`error_rate`), or their p95 latency was more than 20% above the same
+5-minute windows a week earlier (reason `p95`; label `baseline` says
+`previous_24h` when there was no week of history). The alert's value is
+the error rate of the last window before the trip. Sends continue on
+the old path; only the outcome records stop. It resolves when someone
+turns the path back on.
+
+**First query**: `max by (workspace, reason, baseline) (cognitx_tools_relay_effect_outcomes_tripped_error_rate)`;
+`sh`: `docker exec cognitx-lite-tools python -m app.cli.runtime_switches status --workspace <workspace>`
+(the switch row's `reason` and `details` carry every window's calls,
+errors and p95, and the baseline)
+
+**Likely causes**: a defect in the outcome path (errors across every
+tool, starting right after the switch went on); a provider outage or 429s
+(one tool's errors); one automation sending bad arguments.
+
+**Remedy**: the outcome path at fault: leave it off and attach the
+numbers to the R2.2 issue. Anything else: fix or wait out the cause, then
+turn it back on with
+`python -m app.cli.runtime_switches on --workspace <workspace> --by person:<you> --reason "..."`
+(cognitx-lite `tools/RUNBOOK.md`, "Relay outcome switch tripped").
+
+## LiteRelayOutcomesWatchdogStale
+
+**Meaning**: the relay outcome path is on for at least one workspace
+(`cognitx_tools_relay_effect_outcomes_switch` is 1 somewhere) and no
+watchdog pass has completed for 15 minutes, or none ever did since tools
+started. Until a pass completes, nothing turns the path off by itself.
+
+**First query**: `time() - max(cognitx_tools_relay_effect_outcomes_watchdog_last_pass_seconds)`;
+`sh`: `docker logs --since 30m cognitx-lite-tools 2>&1 | grep -i "relay outcome watchdog"`
+
+**Likely causes**: the watchdog's pass failing (tools-db unreachable or
+slow, a query error after a schema change); tools restarting in a loop;
+`EFFECT_OUTCOMES_WATCHDOG_INTERVAL_S` set far above 300.
+
+**Remedy**: fix what the pass log names. Meanwhile decide whether to turn
+the path off everywhere by hand:
+`python -m app.cli.runtime_switches off --all --by person:<you> --reason "watchdog not judging"`.
+
 ## AlertPipelineTest
 
 **Meaning**: the synthetic alert from `make alert-test`. It proves that a rule
