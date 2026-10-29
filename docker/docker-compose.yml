@@ -50,7 +50,7 @@ services:
 
   # Phoenix PostgreSQL - Production trace storage
   phoenix-db:
-    image: postgres:17-alpine
+    image: pgvector/pgvector:pg17
     container_name: cognitx-phoenix-db
     restart: unless-stopped
     env_file:
